@@ -33,9 +33,14 @@ class Machine:
         self.id = id
         self.finished_time = -1
         self.current_task = None
+        self.task_flow = []
 
-    def copy(self):
-        return copy.deepcopy(self)
+    def set_task_flow(self, task_flow):
+        self.task_flow = task_flow
+        self.finished_time = -1
+        self.current_task = None
+
+
 
     def set_initial_state(self):
         self.finished_time = -1
@@ -57,6 +62,7 @@ class Machine:
 
 
 
+
 class Solution:
     def __init__(self, flow_schedule, machines):
         self.flow_schedule = flow_schedule
@@ -67,26 +73,27 @@ class Solution:
     def execute_schedule(self):
         current_time = 0
         for machine in self.machines:
-            for task in self.flow_schedule:
+            for task in machine.task_flow:
                 start_time = max(task.finished_times[machine.id - 1], current_time) if machine.id > 0 else current_time
                 machine.execute_task(task, start_time)
                 current_time = task.finished_times[machine.id]
-                print(
-                    f"Machine {machine.id} - task {task.id} Start time {task.start_times[machine.id]}, End time {task.finished_times[machine.id]}")
+                print(f"Machine {machine.id} - task {task.id} Start time {task.start_times[machine.id]}, End time {task.finished_times[machine.id]}")
             machine.update_finished_time(current_time)
         self.set_criteria_values()
+        print(f" FLOWTIME - {self.total_flowtime} MAKESPAN - {self.makespan}")
 
     def copy(self):
         return copy.deepcopy(self)
     def calculate_makespan(self):
-        return self.flow_schedule[-1].finished_times[-1]
+        return max(task.finished_times[-1] for task  in self.machines[-1].task_flow)
 
     def calculate_total_flowtime(self):
-        return sum(task.finished_times[-1] for task in self.flow_schedule)
+        return sum(task.finished_times[-1] for task in self.machines[-1].task_flow)
 
     def set_criteria_values(self):
         self.makespan = self.calculate_makespan()
         self.total_flowtime = self.calculate_total_flowtime()
+
     def is_dominating(self, b):
         makespan_a = self.makespan
         makespan_b = b.makespan
@@ -103,31 +110,34 @@ class Scheduler:
     def __init__(self, machines):
         self.machines = machines
 
-    def generate_neighbor_schedule(self, old_schedule, machines):
-        new_schedule = self.swap(old_schedule)
-        empty_machines = []
+    def generate_neighbor_schedule(self, machines):
+        new_solution = []
         for mach in machines:
-            mach.set_initial_state()
-            empty_machines.append(mach.copy())
+            machine_schedule = mach.task_flow.copy()
+            self.swap(machine_schedule)
+            mach.set_task_flow(machine_schedule)
+            new_solution.append(machine_schedule)
 
-        s = Solution(new_schedule, empty_machines)
+        s = Solution(new_solution, machines)
         s.execute_schedule()
         return s
 
     def generate_random_schedule(self, tasks, machines):
-        random.shuffle(tasks)
-        empty_machines = []
+        new_solution = []
         for mach in machines:
-            mach.set_initial_state()
-            empty_machines.append(mach.copy())
+            shuffled_tasks = tasks.copy()  # Tworzenie kopii listy tasks
+            random.shuffle(shuffled_tasks)  # Przetasowanie listy
+            mach.set_task_flow(shuffled_tasks)
+            new_solution.append(shuffled_tasks)
 
-        s = Solution(tasks, empty_machines)
+        s = Solution(new_solution, machines)
         s.execute_schedule()
         return s
 
+
     def swap(self, old_schedule):
         new_schedule = []
-        for el in old_schedule.flow_schedule:
+        for el in old_schedule:
             new_schedule.append(el.copy())
         self.swap_random_elements(new_schedule)
         return new_schedule
@@ -157,7 +167,7 @@ class SimulatedAnnealing:
         temperature = self.initial_temperature
 
         for iteration in range(self.max_iterations):
-            neighbor_solution = scheduler.generate_neighbor_schedule(current_solution, self.machines)
+            neighbor_solution = scheduler.generate_neighbor_schedule(self.machines)
             delta = neighbor_solution.makespan + neighbor_solution.total_flowtime - current_solution.makespan + current_solution.total_flowtime
 
             if current_solution.is_dominating(best_solution):
@@ -227,15 +237,15 @@ class SimulatedAnnealing:
         volume = (reference_point[0] - makespan) * (reference_point[1] - total_flowtime)
         return volume
 
-def create_gantt_chart(flow_schedule, machines):
+def create_gantt_chart(flow_schedule, machines, tasks):
     fig, ax = plt.subplots()
     # Ustalamy osie i etykiety
-    ax.set_xlabel("Czas")
-    ax.set_ylabel("Zadania")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Tasks")
     ax.set_yticks(range(len(flow_schedule)))
-    ax.set_yticklabels([f"Zadanie {task.id}" for task in flow_schedule])
+    ax.set_yticklabels([f"Task {task.id}" for task in tasks])
     # Tworzymy słupki dla każdego zadania na odpowiednich maszynach
-    for i, task in enumerate(flow_schedule):
+    for i, task in enumerate(tasks):
         for j in range(len(machines)):
             start_time = task.start_times[j]
             end_time = task.finished_times[j]
@@ -267,13 +277,44 @@ def generate_tasks(n, seed):
 
     return tasks
 
+def plot_pareto(pareto_set, pareto_front):
+    set_makespan_values = [solution.makespan for solution in pareto_set]
+    set_total_flowtime_values = [solution.total_flowtime for solution in pareto_set]
+    front_makespan_values = [solution.makespan for solution in pareto_front]
+    front_total_flowtime_values = [solution.total_flowtime for solution in pareto_front]
+
+    plt.scatter(set_makespan_values, set_total_flowtime_values, label='Pareto Set')
+    plt.plot(front_makespan_values, front_total_flowtime_values, 'o-', label='Pareto Front')
+    plt.xlabel('Makespan')
+    plt.ylabel('Total Flowtime')
+    plt.title('Pareto Set and Front')
+    plt.legend()
+    plt.show()
+
+def plot_gantt_chart(flow_schedule, machines, tasks):
+    fig, ax = plt.subplots()
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Tasks")
+    ax.set_yticks(range(len(flow_schedule)))
+    ax.set_yticklabels([f"Task {task.id}" for task in tasks])
+
+    for i, task in enumerate(flow_schedule):
+        for j in range(len(machines)):
+            start_time = task.start_times[j]
+            end_time = task.finished_times[j]
+            duration = end_time - start_time
+            ax.barh(i, duration, left=start_time, height=0.5, align='center', alpha=0.8, color=f"C{j+1}")
+
+    plt.show()
+
 if __name__ == '__main__':
     # Example usage:
     num_tasks = 5
     seed = 123
     machines = [Machine(0), Machine(1), Machine(2)]
+    tasks = generate_tasks(num_tasks, seed)  # [Task(0, [3, 4, 5], 10), Task(1, [2, 3, 4], 8), Task(2, [4, 5, 6], 12)]
     scheduler = Scheduler(machines)
-    tasks = generate_tasks(num_tasks, seed) #[Task(0, [3, 4, 5], 10), Task(1, [2, 3, 4], 8), Task(2, [4, 5, 6], 12)]
+
     max_iterations = (5,10) # (100, 200, 400, 800, 1600)
     initial_temperature = 100.0
     cooling_rate = 0.95
@@ -283,30 +324,10 @@ if __name__ == '__main__':
     pareto_fronts, pareto_sets = {}, {}
     for maxIter in max_iterations:
         pareto_front, pareto_set, final_schedule = sa.run(scheduler, maxIter)  # F -> pareto_front
-        create_gantt_chart(final_schedule, machines)
         pareto_fronts[maxIter] = pareto_front
         pareto_sets[maxIter] = pareto_set
-        # Wykres zbioru Pareto
-        x_values_set = [solution.makespan for solution in pareto_set]
-        y_values_set = [solution.total_flowtime for solution in pareto_set]
-        print(x_values_set)
-        print(y_values_set)
-        plt.scatter(x_values_set, y_values_set, marker='o', c='blue', label='Pareto Set')
-
-        # Wykres frontu Pareto
-        x_values_front = [solution.makespan for solution in pareto_front]
-        y_values_front = [solution.total_flowtime for solution in pareto_front]
-        plt.scatter(x_values_front, y_values_front, marker='o', c='red', label='Pareto Front')
-
-    plt.xlabel('Makespan')
-    plt.ylabel('Total Flowtime')
-    plt.title('Pareto Set and Front')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-
-
+        plot_pareto(pareto_set, pareto_front)
+        plot_gantt_chart(final_schedule, machines,tasks)
 
 
     print("\nFinal Schedule:")
@@ -314,3 +335,5 @@ if __name__ == '__main__':
         for task in final_schedule:
             print(
                 f"Machine {machine.id} - Task {task.id}: Start Time {task.start_times[machine.id]}, End Time {task.finished_times[machine.id]}")
+
+    print(f" FLOWTIME - {final_schedule.total_flowtime} MAKESPAN - {final_schedule.makespan}")
