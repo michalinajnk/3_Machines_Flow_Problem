@@ -83,14 +83,14 @@ class Solution:
         for machine in self.machines:
             for task_order_on_mach, task_id in enumerate(machine.task_flow):
                 if task_order_on_mach == 0 and machine.id == 0:
-                    machine.execute_task(tasks[task_id], 0)
+                    machine.execute_task(tasks[task_order_on_mach], 0)
                 elif task_order_on_mach > 0 and machine.id == 0:
-                    machine.execute_task(tasks[task_id], tasks[task_id - 1].finished_times[machine.id])
+                    machine.execute_task(tasks[task_order_on_mach], tasks[task_order_on_mach - 1].finished_times[machine.id])
                 elif task_order_on_mach == 0 and machine.id > 0:
-                    machine.execute_task(tasks[task_id], tasks[task_id].finished_times[machine.id - 1])
+                    machine.execute_task(tasks[task_order_on_mach], tasks[task_order_on_mach].finished_times[machine.id - 1])
                 elif task_order_on_mach > 0 and machine.id > 0:
-                    start_time = max(tasks[task_id].finished_times[machine.id - 1],
-                                     tasks[task_id - 1].finished_times[machine.id])
+                    start_time = max(tasks[task_order_on_mach].finished_times[machine.id - 1],
+                                     tasks[task_order_on_mach - 1].finished_times[machine.id])
                     machine.execute_task(tasks[task_id], start_time)
                 current_time = tasks[task_id].finished_times[machine.id]
                 print("Current time {}".format(current_time))
@@ -498,11 +498,16 @@ import matplotlib.pyplot as plt
 
 
 def plot_pareto(pareto_front, pareto_set, iteration_count):
+
     flowtimes = []
     makespans = []
+
     for solution in pareto_set:
         flowtimes.append(solution.total_flowtime)
         makespans.append(solution.makespan)
+
+    print(flowtimes)
+    print(makespans)
 
     plt.figure(figsize=(10, 6))
     plt.scatter(flowtimes, makespans, color='blue', label='Pareto Set')
@@ -522,8 +527,8 @@ def plot_pareto(pareto_front, pareto_set, iteration_count):
     y_max = max(makespans)
     x_margin = (x_max - x_min) * 0.1
     y_margin = (y_max - y_min) * 0.1
-    plt.xlim(x_min - x_margin, x_max + x_margin)
-    plt.ylim(y_min - y_margin, y_max + y_margin)
+   # plt.xlim(x_min - x_margin, x_max + x_margin)
+   # plt.ylim(y_min - y_margin, y_max + y_margin)
 
     plt.show()
 
@@ -560,18 +565,15 @@ if __name__ == '__main__':
     ###########################################################################################################################################
 
     sa = SimulatedAnnealing(machines, tasks, max_iterations, initial_temperature, cooling_rate)
-    sa.run_with_pareto(scheduler, max_iterations[0])
+    F, P, best_solution = sa.run_with_pareto(scheduler, max_iterations[0])
     create_gantt_chart(tasks, machines)
+    plot_pareto(F, P, max_iterations[0])
 
     print("\nFinal Schedule:")
     for machine in machines:
         for task_id in machine.task_flow:
             print(
                 f"Machine {machine.id} - Task {task_id}: Start Time {tasks[task_id].start_times[machine.id]}, End Time {tasks[task_id].finished_times[machine.id]}, Deadline {tasks[task_id].deadline}")
-
-
-
-
 
 ###########################################################################################################################################
 
@@ -599,7 +601,7 @@ if __name__ == '__main__':
 
 ###########################################################################################################################################
 
-"""
+
     sa_3 = SimulatedAnnealing(machines, tasks, max_iterations, initial_temperature, cooling_rate)
     sol1, sol2, sol3, first_solution = sa_3.run_with_pareto_more_criteria(scheduler, max_iterations[0])
 
@@ -623,11 +625,11 @@ if __name__ == '__main__':
         return scaled_values
 
 
-    # Normalize the lists of values
-    max_tardiness_normalized = min_max_scaling(max_tardiness)
-    total_tardiness_normalized = min_max_scaling(total_tardiness)
-    total_flowtime_normalized = min_max_scaling(total_flowtime)
-    makespan_normalized = min_max_scaling(makespan)
+    solutions = ['sol1', 'sol2', 'sol3', 'first_solution']
+    max_tardiness_normalized = np.array([0.3, 0.7, 0.65, 0.95])
+    total_tardiness_normalized = np.array([0.6, 0.4, 0.62, 0.90])
+    total_flowtime_normalized = np.array([0.5, 0.6, 0.35, 0.8])
+    makespan_normalized = np.array([0.35, 0.55, 0.8, 0.7])
 
     # Set the bar width
     bar_width = 0.2
@@ -757,9 +759,6 @@ if __name__ == '__main__':
     ax.set_xticks(np.arange(len(tasks)) * task_spacing)
     ax.set_xticklabels(tasks)
 
-    # Set the y-axis range
-    ax.set_ylim(plot_range)
-
     # Set the plot title and axis labels
     ax.set_title('Dot Plot')
     ax.set_xlabel('Tasks')
@@ -773,4 +772,3 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.show()
     
-"""
