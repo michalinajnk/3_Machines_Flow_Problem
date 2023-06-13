@@ -81,21 +81,21 @@ class Solution:
     def execute_schedule(self, tasks):
         current_time = 0
         for machine in self.machines:
-            for id_task, task in enumerate(machine.task_flow):
-                if id_task == 0 and machine.id == 0:
-                    machine.execute_task(tasks[id_task], 0)
-                elif id_task > 0 and machine.id == 0:
-                    machine.execute_task(tasks[id_task], tasks[id_task - 1].finished_times[machine.id])
-                elif id_task == 0 and machine.id > 0:
-                    machine.execute_task(tasks[id_task], tasks[id_task].finished_times[machine.id - 1])
-                elif id_task > 0 and machine.id > 0:
-                    start_time = max(tasks[id_task].finished_times[machine.id - 1],
-                                     tasks[id_task - 1].finished_times[machine.id])
-                    machine.execute_task(tasks[id_task], start_time)
-                current_time = tasks[id_task].finished_times[machine.id]
+            for task_order_on_mach, task_id in enumerate(machine.task_flow):
+                if task_order_on_mach == 0 and machine.id == 0:
+                    machine.execute_task(tasks[task_id], 0)
+                elif task_order_on_mach > 0 and machine.id == 0:
+                    machine.execute_task(tasks[task_id], tasks[task_id - 1].finished_times[machine.id])
+                elif task_order_on_mach == 0 and machine.id > 0:
+                    machine.execute_task(tasks[task_id], tasks[task_id].finished_times[machine.id - 1])
+                elif task_order_on_mach > 0 and machine.id > 0:
+                    start_time = max(tasks[task_id].finished_times[machine.id - 1],
+                                     tasks[task_id - 1].finished_times[machine.id])
+                    machine.execute_task(tasks[task_id], start_time)
+                current_time = tasks[task_id].finished_times[machine.id]
                 print("Current time {}".format(current_time))
                 print(
-                    f"Machine {machine.id} - task {tasks[id_task].id} Start time {tasks[id_task].start_times[machine.id]}, End time {tasks[id_task].finished_times[machine.id]}")
+                    f"Machine {machine.id} - task {tasks[task_order_on_mach].id} Start time {tasks[task_order_on_mach].start_times[machine.id]}, End time {tasks[task_order_on_mach].finished_times[machine.id]}")
             machine.update_finished_time(current_time)
         self.set_criteria_values(tasks)
         print(f" FLOWTIME - {self.total_flowtime} MAKESPAN - {self.makespan}")
@@ -103,15 +103,18 @@ class Solution:
     def copy(self):
         return copy.deepcopy(self)
 
+    #zakończenie ostatniego zadania na ostatniej maszynie
     def calculate_makespan(self, tasks):
         task_id = self.machines[-1].task_flow[-1]
         return tasks[task_id].finished_times[-1]
 
+    #sumę czasów zakończenia wszystkich zadań na trzeciej maszynie.
     def calculate_total_flowtime(self, tasks):
         total_flowtime = 0
         for task in tasks:
-            for finished_time in task.finished_times:
-                total_flowtime += finished_time
+            print(task.finished_times[-1])
+            total_flowtime += task.finished_times[-1]
+
         return total_flowtime
 
     def calculate_max_tardiness(self, tasks):
@@ -236,6 +239,7 @@ class Scheduler:
         self.machines = machines
 
     def generate_neighbor_schedule(self, machines, tasks, num_swaps=1):
+        num_swaps = len(tasks) // 3
         new_solution = []
         indices = self.draw_random_indices(tasks, num_swaps)
         for mach in machines:
@@ -493,7 +497,7 @@ def generate_tasks(n, seed):
 import matplotlib.pyplot as plt
 
 
-def plot_pareto_front(pareto_front, pareto_set, iteration_count):
+def plot_pareto(pareto_front, pareto_set, iteration_count):
     flowtimes = []
     makespans = []
     for solution in pareto_set:
@@ -523,10 +527,27 @@ def plot_pareto_front(pareto_front, pareto_set, iteration_count):
 
     plt.show()
 
+def create_gantt_chart(tasks, machines):
+    fig, ax = plt.subplots()
+    # Ustalamy osie i etykiety
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Tasks")
+    ax.set_yticks(range(len(tasks)))
+    ax.set_yticklabels([f"Task {task.id}" for task in tasks])
+
+    # Tworzymy słupki dla każdego zadania na odpowiednich maszynach
+
+    for machine in machines:
+        for task_id in machine.task_flow:
+            start_time = tasks[task_id].start_times[machine.id]
+            duration = tasks[task_id].durations[machine.id]
+            ax.barh(task_id, duration, left=start_time, height=0.5, align='center', alpha=0.8, color=f"C{machine.id+1}")
+    plt.title("Gantt chart for 3 machine flowshop problem")
+    plt.show()
 
 if __name__ == '__main__':
     # Example usage:
-    num_tasks = 100
+    num_tasks = 20
     seed = 123
     machines = [Machine(0), Machine(1), Machine(2)]
     tasks = generate_tasks(num_tasks, seed)  # [Task(0, [3, 4, 5], 10), Task(1, [2, 3, 4], 8), Task(2, [4, 5, 6], 12)]
@@ -540,6 +561,7 @@ if __name__ == '__main__':
 
     sa = SimulatedAnnealing(machines, tasks, max_iterations, initial_temperature, cooling_rate)
     sa.run_with_pareto(scheduler, max_iterations[0])
+    create_gantt_chart(tasks, machines)
 
     print("\nFinal Schedule:")
     for machine in machines:
